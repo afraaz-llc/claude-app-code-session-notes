@@ -1,0 +1,13 @@
+# macOS and editors
+.DS_Store
+*~
+*.swp
+
+# Logs
+*.log
+
+# Written by Claude Code when it loads the mod from a folder it hot-reloads
+.claude-plugin/types/
+.mcpb-cache/
+
+node_modules/

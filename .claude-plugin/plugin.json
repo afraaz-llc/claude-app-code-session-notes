@@ -1,0 +1,10 @@
+{
+  "name": "session-notes",
+  "version": "0.1.0",
+  "description": "A private notepad for each Claude Code session (/notes), saved as a plain file on your computer and never sent to Claude",
+  "author": { "name": "Afraaz Ali", "url": "https://github.com/afraaz-llc" },
+  "homepage": "https://github.com/afraaz-llc/claude-app-code-session-notes",
+  "repository": "https://github.com/afraaz-llc/claude-app-code-session-notes",
+  "license": "MIT",
+  "keywords": ["notes", "notepad", "privacy", "pane"]
+}
