@@ -1,4 +1,4 @@
-# session-notes
+# Session Notes
 
 A private notepad for each Claude Code session.
 
@@ -29,7 +29,10 @@ claude plugin install session-notes --marketplace afraaz-llc/claude-app-code-ses
 ## Using it
 
 - `/notes` opens the notepad. It works while Claude is in the middle of a reply, too.
-- Your text is saved as you type. Enter also saves; Shift+Enter starts a new line.
+- Type a line in the box at the bottom and press Enter to add it to the end of your notes.
+- Your notes are in the big box above it, where you can edit, copy and paste. Shift+Enter starts a
+  new line there.
+- Every change is saved the moment you make it, so there's no save button.
 - A session that already has notes opens them again when it starts, as a small widget where the app
   has widgets.
 - Notes are kept in `~/.claude/session-notes/` (on Windows, `%USERPROFILE%\.claude\session-notes\`),
@@ -41,6 +44,9 @@ claude plugin install session-notes --marketplace afraaz-llc/claude-app-code-ses
 - They never go into the conversation, so Claude doesn't see them unless you ask it to open the file.
 - Where a session is shown somewhere other than your computer, such as the Claude mobile app through
   Remote Control, the notepad shows a placeholder instead of your notes.
+- On your computer the mod reads and writes files in `~/.claude/session-notes/` and nowhere else. It
+  reads the `HOME` variable (`USERPROFILE` on Windows) to find that folder, and it runs no programs or
+  commands.
 
 ## Development
 

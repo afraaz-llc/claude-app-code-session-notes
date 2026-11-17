@@ -11,6 +11,11 @@ with `/plugin install session-notes --marketplace afraaz-llc/claude-app-code-ses
 - `tests/notes.test.ts`: the tests, run by `claude plugin test .`.
 - `.claude-plugin/plugin.json`: the manifest. `.claude-plugin/marketplace.json` makes this repo its
   own marketplace (one entry, `source: "./"`).
+- The directory listing's icon is icon.png beside plugin.json, which names it. Anthropic's directory
+  takes the icon only the first time the plugin is saved or submitted in its developer portal, so
+  changing the file after that changes nothing.
+- This file lives in `.claude/`, not at the root: the repo root is the plugin folder, and a
+  CLAUDE.md there draws a `plugin validate` warning.
 
 ## Working on it
 
@@ -28,6 +33,9 @@ with `/plugin install session-notes --marketplace afraaz-llc/claude-app-code-ses
   `include` naming the types file, `hooks` and `tests`.
 - `plugin validate` refuses `$` passed to a helper unless the helper is a top-level function of the
   file, so module state and helpers live at the top level, not inside `register`.
+- Before a release, check what the directory will see: export the commit with `git archive HEAD`
+  into an empty folder outside this repo, and run `claude plugin validate --profile directory
+  --strict` on that folder. It should pass with no warnings.
 
 ## Rules
 
@@ -37,4 +45,9 @@ with `/plugin install session-notes --marketplace afraaz-llc/claude-app-code-ses
 - Changing where notes are saved, or how their files are named, strands everyone's existing notes.
   Keep the scheme, or ship a migration with the change.
 - Release by committing to `main` and pushing, with a `version` bump in `plugin.json` for anything
-  users should pick up.
+  users should pick up. Once the plugin is listed in Anthropic's directory, the directory follows
+  `main` too: it scans each new commit before that version goes live.
+- The README is the directory listing's description, and the directory's security scan checks the
+  code against it. Keep its Privacy section's list of what the mod reads and writes complete.
+- Never write a bundled image's path in backticks or a code block, in any file here. The directory
+  holds a plugin that does for a reviewer.

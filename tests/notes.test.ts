@@ -62,15 +62,16 @@ function world(
   return files
 }
 
-test('typing saves to a new file for the session, on every local surface', async ($, on) => {
+test('every change is saved at once, on every local surface', async ($, on) => {
   const files = world(on)
 
   const desktop = await $.ui.mount({ ...PANE, surface: 'desktop' })
   expect((await desktop.find({ type: 'Input', key: 'notes' }))?.props.value).toBe('')
   await desktop.input({ key: 'notes', text: 'call the bank', kind: 'change' })
+  expect(files[NEW_FILE]).toBe('call the bank')
   await desktop.input({ key: 'notes', text: 'call the bank\nbuy milk', kind: 'change' })
-  await desktop.unmount()
   expect(files[NEW_FILE]).toBe('call the bank\nbuy milk')
+  await desktop.unmount()
 
   // The same session in a terminal picks up where the app left off.
   const terminal = await $.ui.mount({ ...PANE, surface: 'terminal' })
@@ -81,6 +82,92 @@ test('typing saves to a new file for the session, on every local surface', async
   await terminal.unmount()
   expect(files[NEW_FILE]).toBe('done')
   expect(Object.keys(files)).toEqual([NEW_FILE])
+})
+
+test('there are no save buttons, and the terminal hints say save and add', async ($, on) => {
+  world(on)
+
+  for (const surface of ['desktop', 'vscode'] as const) {
+    const pane = await $.ui.mount({ ...PANE, surface })
+    for (const key of ['notes', 'add']) {
+      expect((await pane.find({ type: 'Input', key }))?.props).not.toHaveProperty('submitLabel')
+    }
+    await pane.unmount()
+  }
+
+  // The terminal draws no buttons, only key hints: "⏎ save" and "⏎ add"
+  // rather than its own "⏎ submit".
+  const terminal = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  expect((await terminal.find({ type: 'Input', key: 'notes' }))?.props.submitLabel).toBe('save')
+  expect((await terminal.find({ type: 'Input', key: 'add' }))?.props.submitLabel).toBe('add')
+  await terminal.unmount()
+})
+
+test('Enter in the add box adds its line to the notes, and empties it', async ($, on) => {
+  const files = world(on, { [OLD_FILE]: 'call the bank' })
+
+  const pane = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  const box = async (key: string) => (await pane.find({ type: 'Input', key }))?.props
+  expect((await box('add'))?.autoFocus).toBe(true)
+  expect(await box('notes')).not.toHaveProperty('autoFocus')
+  // Two lines, so that the app draws it as wide as the pane.
+  expect((await box('add'))?.rows).toBe(2)
+
+  await pane.input({ key: 'add', text: 'buy milk' })
+  expect(files[OLD_FILE]).toBe('call the bank\nbuy milk')
+  expect((await box('notes'))?.value).toBe('call the bank\nbuy milk')
+  expect((await box('add'))?.value).toBe('')
+
+  // Typing again draws the box as the person's own, so that drawing it
+  // empty after the next Enter clears it again.
+  await pane.input({ key: 'add', text: 'e', kind: 'change' })
+  expect(await box('add')).not.toHaveProperty('value')
+  await pane.input({ key: 'add', text: 'eggs' })
+  expect(files[OLD_FILE]).toBe('call the bank\nbuy milk\neggs')
+  expect((await box('add'))?.value).toBe('')
+
+  // An empty line adds nothing.
+  await pane.input({ key: 'add', text: '  ' })
+  expect(files[OLD_FILE]).toBe('call the bank\nbuy milk\neggs')
+  await pane.unmount()
+})
+
+test('the boxes fill the pane, so only the notes scroll', async ($, on) => {
+  world(on)
+  const layout = async (surface: 'desktop' | 'terminal') => {
+    const pane = await $.ui.mount({ ...PANE, surface })
+    const drawn = {
+      box: (await pane.find({ type: 'Box' }))?.props,
+      notes: (await pane.find({ type: 'Input', key: 'notes' }))?.props.rows,
+      add: (await pane.find({ type: 'Input', key: 'add' }))?.props.rows,
+    }
+    await pane.unmount()
+
+    return drawn
+  }
+
+  // The pane is 30 rows. In the app the Box is that tall with even padding
+  // inside, room for the focus outline, and the add box at its bottom.
+  const desktop = await layout('desktop')
+  expect(desktop.box).toEqual(
+    expect.objectContaining({ height: 30, padding: 'sm', justifyContent: 'space-between' }),
+  )
+  expect([desktop.notes, desktop.add]).toEqual([25, 2])
+
+  // The terminal draws no outline, so it gets no padding: 28 rows, a row
+  // between and the add box.
+  const terminal = await layout('terminal')
+  expect(terminal.box).not.toHaveProperty('padding')
+  expect([terminal.notes, terminal.add]).toEqual([28, 1])
+})
+
+test('the first line added starts the notes, with no blank line before it', async ($, on) => {
+  const files = world(on)
+
+  const pane = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  await pane.input({ key: 'add', text: 'first' })
+  expect(files[NEW_FILE]).toBe('first')
+  await pane.unmount()
 })
 
 test('notes saved earlier come back, and the widget shows their first line', async ($, on) => {

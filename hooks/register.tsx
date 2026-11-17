@@ -2,8 +2,9 @@ import type { EngineInterface, Register } from 'claude-code'
 
 // session-notes: a private notepad for each Claude Code session.
 //
-// /notes opens it. What you type is saved as you type, to a plain Markdown
-// file on this computer, one per session:
+// /notes opens it: the notes in a box to edit, and under them a box where
+// Enter adds a line to the end. What you type is saved as you type, to a
+// plain Markdown file on this computer, one per session:
 //   ~/.claude/session-notes/<date> <folder> <session id>.md
 // The text is never added to the conversation, so Claude doesn't see it
 // unless you ask it to open that file, and nothing here uses the network.
@@ -11,9 +12,8 @@ import type { EngineInterface, Register } from 'claude-code'
 
 const PANE = 'session-notes'
 const TITLE = 'Notes'
-const PLACEHOLDER =
-  'Private notes for this session. Not sent to Claude; saved only on this computer.'
-const HINT = 'Saved on this computer as you type. Shift+Enter starts a new line.'
+const PLACEHOLDER = 'Saved locally, not sent anywhere'
+const ADD_PLACEHOLDER = 'Enter key only works here. Use Shift+Enter in the field above.'
 
 type Save = { path: string; text: string }
 
@@ -26,6 +26,9 @@ const drafts = new Map<string, string>()
 let queued: Save | undefined
 let isSaving = false
 let isWidget = false
+// What the add box is drawn holding: nothing, so it shows what the person
+// typed, or empty just after a line was added from it, which clears it.
+let addValue: '' | undefined
 
 // Beside Claude's own files in the home folder: HOME on macOS and Linux,
 // USERPROFILE on Windows, whose file calls take forward slashes too.
@@ -110,6 +113,20 @@ async function save($: EngineInterface, path: string, text: string): Promise<voi
   }
 }
 
+// Adds a line from the add box to the end of the notes, then empties the
+// box. A surface keeps what the person typed until the box is drawn holding
+// something else, so it is drawn empty, after being drawn as theirs.
+async function add($: EngineInterface, path: string, line: string): Promise<void> {
+  if (line.trim() === '') {
+    return
+  }
+  const text = await textOf($, path)
+  addValue = ''
+  const saving = save($, path, text === '' || text.endsWith('\n') ? text + line : `${text}\n${line}`)
+  void $.ui.invalidate('ui.render')
+  await saving
+}
+
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     await $.command.register({
@@ -168,28 +185,64 @@ export const register: Register = on => {
       )
     }
 
-    // The box fills the pane, less the gap and the hint line under it.
-    const rows = Math.min(200, Math.max(6, e.props.scroll.bodyRows - 3))
+    // Every change is saved as it is typed, so there is no save button. The
+    // desktop app and VS Code draw one only for a field given a submitLabel.
+    // The terminal draws a key hint instead, "⏎ submit" unless told
+    // otherwise, which would read as if the notes were sent somewhere.
+    const isTerminal = e.surface === 'terminal'
+    const bodyRows = e.props.scroll.bodyRows
+
+    // The boxes fill the pane, so that only the notes scroll, never the pane.
+    // The terminal lays them out in whole rows: the notes, a row between, and
+    // the add box. In the app the Box around them is the pane's rows tall,
+    // its padding inside that, and the add box sits at its bottom. The notes
+    // take the rows left less five: their padding, the add box's two lines
+    // and padding, and some space between. The padding is the same on every
+    // side and gives the focus outline room, a ring and a glow about 8px
+    // wide drawn outside a field, which the app cuts off at the pane's edges.
+    const rows = Math.min(200, Math.max(3, bodyRows - (isTerminal ? 2 : 5)))
+    const layout = isTerminal
+      ? ({ gap: 1 } as const)
+      : ({
+          height: Math.max(bodyRows, rows + 5),
+          padding: 'sm',
+          justifyContent: 'space-between',
+        } as const)
 
     return (
-      <Box flexDirection="column" gap={1}>
+      <Box flexDirection="column" {...layout}>
         <Input
           key="notes"
           rows={rows}
           value={text}
           placeholder={PLACEHOLDER}
-          submitLabel="save"
-          autoFocus
+          submitLabel={isTerminal ? 'save' : undefined}
           onInput={value => void save($, path, value)}
           onSubmit={value => {
-            // Enter saves. Drawing again keeps the text in the box on a
+            // Enter saves too. Drawing again keeps the text in the box on a
             // surface that would empty a field it submitted.
             void save($, path, value).then(() => $.ui.invalidate('ui.render'))
           }}
         />
-        <Text dimColor size="caption">
-          {HINT}
-        </Text>
+        <Input
+          key="add"
+          // The app draws a one-line field only as wide as its own few
+          // words, and a field of two lines or more as wide as the pane.
+          rows={isTerminal ? 1 : 2}
+          value={addValue}
+          placeholder={ADD_PLACEHOLDER}
+          submitLabel={isTerminal ? 'add' : undefined}
+          autoFocus
+          onInput={() => {
+            // Typing after a line was added: the box is drawn as the person's
+            // own again, so that drawing it empty next time clears it.
+            if (addValue !== undefined) {
+              addValue = undefined
+              void $.ui.invalidate('ui.render')
+            }
+          }}
+          onSubmit={value => void add($, path, value)}
+        />
       </Box>
     )
   })
