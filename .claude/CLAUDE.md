@@ -33,6 +33,11 @@ with `/plugin install session-notes --marketplace afraaz-llc/claude-app-code-ses
   `include` naming the types file, `hooks` and `tests`.
 - `plugin validate` refuses `$` passed to a helper unless the helper is a top-level function of the
   file, so module state and helpers live at the top level, not inside `register`.
+- The test kit can't stand in for the mod's own `$.ui.focus` call: no test stub hears it (checked on
+  2.1.326). The tests check when `/notes` asks for the keyboard; check where the cursor lands in
+  the app.
+- In the desktop app, Tab in the prompt box accepts Claude's suggested prompt, and a mod never sees
+  keys typed there. No key can be made to jump from the prompt into the notepad; `/notes` does it.
 - Before a release, check what the directory will see: export the commit with `git archive HEAD`
   into an empty folder outside this repo, and run `claude plugin validate --profile directory
   --strict` on that folder. It should pass with no warnings.

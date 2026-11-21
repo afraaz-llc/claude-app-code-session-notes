@@ -3,8 +3,9 @@ import type { EngineInterface, Register } from 'claude-code'
 // session-notes: a private notepad for each Claude Code session.
 //
 // /notes opens it: the notes in a box to edit, and under them a box where
-// Enter adds a line to the end. What you type is saved as you type, to a
-// plain Markdown file on this computer, one per session:
+// Enter adds a line to the end, which gets the cursor. What you type is
+// saved as you type, to a plain Markdown file on this computer, one per
+// session:
 //   ~/.claude/session-notes/<date> <folder> <session id>.md
 // The text is never added to the conversation, so Claude doesn't see it
 // unless you ask it to open that file, and nothing here uses the network.
@@ -127,6 +128,32 @@ async function add($: EngineInterface, path: string, line: string): Promise<void
   await saving
 }
 
+// How long /notes waits each time before asking for the keyboard again.
+const ASK_AGAIN_MS = [100, 250, 500]
+
+// Puts the cursor in the add box once the pane holds the keyboard. /notes
+// asks for the keyboard as it opens the pane, but the app hands it over only
+// while the prompt box is empty, which it may not be until the command has
+// run. So this asks again for under a second, then moves the cursor to the
+// add box even if the person last left it in the notes.
+async function focusAdd($: EngineInterface): Promise<void> {
+  for (const wait of [...ASK_AGAIN_MS, undefined]) {
+    const pane = (await $.ui.panes()).find(open => open.id === PANE)
+    if (pane === undefined || !pane.isPlaced) {
+      return
+    }
+    if (pane.isFocused) {
+      await $.ui.focus({ requestId: PANE, key: 'add' })
+      return
+    }
+    if (wait === undefined) {
+      return
+    }
+    await $.clock.sleep(wait)
+    await $.ui.open({ id: PANE, title: TITLE, focus: true })
+  }
+}
+
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     await $.command.register({
@@ -149,10 +176,14 @@ export const register: Register = on => {
       await $.ui.close({ id: PANE })
     }
     const opened = await $.ui.open({ id: PANE, title: TITLE, focus: true })
+    if (!opened.isPlaced) {
+      return { text: `The notepad can't be shown here: ${opened.reason}` }
+    }
+    // Not awaited: the prompt box lets go of the keyboard only once this
+    // command has finished.
+    void focusAdd($).catch(() => undefined)
 
-    return opened.isPlaced
-      ? {}
-      : { text: `The notepad can't be shown here: ${opened.reason}` }
+    return {}
   })
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {

@@ -23,6 +23,9 @@ const PANE = {
 
 type Place = { env?: Record<string, string>; cwd?: string }
 
+// The running test's clock, which world() sets up.
+let clock: ReturnType<typeof mock.clock>
+
 // Stands for the engine beneath the plugin: this session's id and folder, a
 // clock at noon on 2026-11-15, and a file system in memory.
 function world(
@@ -31,7 +34,7 @@ function world(
   { env = { HOME }, cwd = `${HOME}/Developer` }: Place = {},
 ): Record<string, string> {
   mock.env(on, env)
-  mock.clock(on, { now: new Date(2026, 10, 15, 12).getTime() })
+  clock = mock.clock(on, { now: new Date(2026, 10, 15, 12).getTime() })
   on('session.id', () => ({ value: ID }))
   on('session.cwd', () => ({ value: cwd }))
   on('fs.list', (_, e) => ({
@@ -309,4 +312,73 @@ test('/notes brings a widget back full size', async ($, on) => {
   expect(closed).toEqual([expect.objectContaining({ id: 'session-notes' })])
   expect(opened.at(-1)).toEqual(expect.objectContaining({ focus: true }))
   expect(opened.at(-1)).not.toHaveProperty('placement')
+})
+
+// The engine beneath /notes and the keyboard: the pane holds the keyboard
+// once the mod has asked for it `grantedOn` times, the prompt box refusing
+// the asks before that, and every ask is recorded.
+//
+// What the mod then does with the keyboard, $.ui.focus to put the cursor in
+// the add box, the kit can't answer for a plugin (its test stubs never hear
+// that call), so the app is where that part is checked.
+function keyboard(on: On, grantedOn: number): unknown[] {
+  const asks: unknown[] = []
+  on('command.register', () => ({ value: { command: 'notes' } }))
+  on('session.start', (_, e) => ({ cwd: e.cwd }))
+  on('ui.open', (_, e) => {
+    asks.push(e)
+
+    return { value: { isPlaced: true } }
+  })
+  on('ui.panes', () => ({
+    value: asks.length === 0 ? [] : [{ ...OPEN_PANE, isFocused: asks.length >= grantedOn }],
+  }))
+
+  return asks
+}
+
+const NOTES = {
+  command: 'notes',
+  args: '',
+  origin: { kind: 'composer' },
+  presentation: { isFullscreen: true, columns: 160 },
+} as const
+
+test('/notes asks for the keyboard once when the pane takes it at once', async ($, on) => {
+  world(on)
+  const asks = keyboard(on, 1)
+
+  await $.session.start(START)
+  await $.command.run(NOTES)
+  await clock.advance(5000)
+  expect(asks).toEqual([expect.objectContaining({ id: 'session-notes', focus: true })])
+})
+
+test('/notes asks for the keyboard again while the prompt box keeps it', async ($, on) => {
+  world(on)
+  const asks = keyboard(on, 3)
+
+  await $.session.start(START)
+  await $.command.run(NOTES)
+  await clock.settle()
+  expect(asks).toHaveLength(1)
+  await clock.advance(100)
+  expect(asks).toHaveLength(2)
+  await clock.advance(250)
+  expect(asks).toHaveLength(3)
+  expect(asks.at(-1)).toEqual(expect.objectContaining({ id: 'session-notes', focus: true }))
+  // The pane has the keyboard now, so there are no more asks.
+  await clock.advance(5000)
+  expect(asks).toHaveLength(3)
+})
+
+test('/notes stops asking for the keyboard after a moment', async ($, on) => {
+  world(on)
+  const asks = keyboard(on, 99)
+
+  await $.session.start(START)
+  await $.command.run(NOTES)
+  await clock.advance(5000)
+  // The ask as the pane opens, then three more.
+  expect(asks).toHaveLength(4)
 })

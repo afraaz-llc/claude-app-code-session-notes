@@ -28,11 +28,13 @@ claude plugin install session-notes --marketplace afraaz-llc/claude-app-code-ses
 
 ## Using it
 
-- `/notes` opens the notepad. It works while Claude is in the middle of a reply, too.
+- `/notes` opens the notepad and puts the cursor in the box at the bottom, and running it again
+  puts the cursor back there. It opens while Claude is in the middle of a reply, too.
 - Type a line in the box at the bottom and press Enter to add it to the end of your notes.
 - Your notes are in the big box above it, where you can edit, copy and paste. Shift+Enter starts a
   new line there.
 - Every change is saved the moment you make it, so there's no save button.
+- In a terminal, Ctrl+X then Tab moves between the prompt and the notepad.
 - A session that already has notes opens them again when it starts, as a small widget where the app
   has widgets.
 - Notes are kept in `~/.claude/session-notes/` (on Windows, `%USERPROFILE%\.claude\session-notes\`),
