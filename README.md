@@ -9,7 +9,7 @@ doesn't read it unless you ask it to open the file, and the mod makes no network
 ## Install
 
 You need a recent version of Claude Code. This is a mod (a plugin with a hooks module), an
-early-access Claude Code feature. Tested on macOS with Claude Code 2.1.325.
+early-access Claude Code feature. Tested on macOS with Claude Code 2.1.330.
 
 **Claude desktop app:** click **+** next to the prompt box, then **Plugins**, then **Add marketplace**
 with `afraaz-llc/claude-app-code-session-notes`, then **Add plugin**.
@@ -28,11 +28,13 @@ claude plugin install session-notes --marketplace afraaz-llc/claude-app-code-ses
 
 ## Using it
 
-- `/notes` opens the notepad and puts the cursor in the box at the bottom, and running it again
-  puts the cursor back there. It opens while Claude is in the middle of a reply, too.
-- Type a line in the box at the bottom and press Enter to add it to the end of your notes.
-- Your notes are in the big box above it, where you can edit, copy and paste. Shift+Enter starts a
-  new line there.
+- `/notes` opens the notepad with the cursor in it, and running it again puts the cursor back
+  there. It opens while Claude is in the middle of a reply, too.
+- Type, edit, copy and paste in it as in any text box. Shift+Enter starts a new line; Enter on
+  its own only saves, because the app sends a text box's contents when you press Enter.
+- In the desktop app, a row under the notepad shows the Shift+Enter hint, a link to this
+  repository on GitHub, and an ⓘ that explains how the notepad works and shows the file your notes
+  are saved to.
 - Every change is saved the moment you make it, so there's no save button.
 - In a terminal, Ctrl+X then Tab moves between the prompt and the notepad.
 - A session that already has notes opens them again when it starts, as a small widget where the app
@@ -49,6 +51,8 @@ claude plugin install session-notes --marketplace afraaz-llc/claude-app-code-ses
 - On your computer the mod reads and writes files in `~/.claude/session-notes/` and nowhere else. It
   reads the `HOME` variable (`USERPROFILE` on Windows) to find that folder, and it runs no programs or
   commands.
+- The only web address in the mod is the GitHub link under the notepad, which opens in your browser
+  only when you click it.
 
 ## Development
 

@@ -2,10 +2,9 @@ import type { EngineInterface, Register } from 'claude-code'
 
 // session-notes: a private notepad for each Claude Code session.
 //
-// /notes opens it: the notes in a box to edit, and under them a box where
-// Enter adds a line to the end, which gets the cursor. What you type is
-// saved as you type, to a plain Markdown file on this computer, one per
-// session:
+// /notes opens it: the notes in one box to edit, with the cursor in it. What
+// you type is saved as you type, to a plain Markdown file on this computer,
+// one per session:
 //   ~/.claude/session-notes/<date> <folder> <session id>.md
 // The text is never added to the conversation, so Claude doesn't see it
 // unless you ask it to open that file, and nothing here uses the network.
@@ -13,23 +12,22 @@ import type { EngineInterface, Register } from 'claude-code'
 
 const PANE = 'session-notes'
 const TITLE = 'Notes'
-const PLACEHOLDER = 'Saved locally, not sent anywhere'
-const ADD_PLACEHOLDER = 'Enter key only works here. Use Shift+Enter in the field above.'
+// Where the app's notepad links to; it opens only when the person clicks it.
+const REPO = 'https://github.com/afraaz-llc/claude-app-code-session-notes'
 
 type Save = { path: string; text: string }
 
 // The file is the record. These only remember, for this load of the module,
 // where each session's file is, the newest text typed into it (so a redraw
-// while a save is under way never shows older text), and whether the pane
-// was last drawn in its small form. A reload starts them over from the file.
+// while a save is under way never shows older text), whether the pane was
+// last drawn in its small form, and whether the app shows the note about the
+// notepad in place of the notes. A reload starts them over from the file.
 const paths = new Map<string, string>()
 const drafts = new Map<string, string>()
 let queued: Save | undefined
 let isSaving = false
 let isWidget = false
-// What the add box is drawn holding: nothing, so it shows what the person
-// typed, or empty just after a line was added from it, which clears it.
-let addValue: '' | undefined
+let isInfoShown = false
 
 // Beside Claude's own files in the home folder: HOME on macOS and Linux,
 // USERPROFILE on Windows, whose file calls take forward slashes too.
@@ -114,36 +112,21 @@ async function save($: EngineInterface, path: string, text: string): Promise<voi
   }
 }
 
-// Adds a line from the add box to the end of the notes, then empties the
-// box. A surface keeps what the person typed until the box is drawn holding
-// something else, so it is drawn empty, after being drawn as theirs.
-async function add($: EngineInterface, path: string, line: string): Promise<void> {
-  if (line.trim() === '') {
-    return
-  }
-  const text = await textOf($, path)
-  addValue = ''
-  const saving = save($, path, text === '' || text.endsWith('\n') ? text + line : `${text}\n${line}`)
-  void $.ui.invalidate('ui.render')
-  await saving
-}
-
 // How long /notes waits each time before asking for the keyboard again.
 const ASK_AGAIN_MS = [100, 250, 500]
 
-// Puts the cursor in the add box once the pane holds the keyboard. /notes
-// asks for the keyboard as it opens the pane, but the app hands it over only
-// while the prompt box is empty, which it may not be until the command has
-// run. So this asks again for under a second, then moves the cursor to the
-// add box even if the person last left it in the notes.
-async function focusAdd($: EngineInterface): Promise<void> {
+// Puts the cursor in the notes once the pane holds the keyboard. /notes asks
+// for the keyboard as it opens the pane, but the app hands it over only while
+// the prompt box is empty, which it may not be until the command has run. So
+// this asks again for under a second, then moves the cursor to the notes.
+async function focusNotes($: EngineInterface): Promise<void> {
   for (const wait of [...ASK_AGAIN_MS, undefined]) {
     const pane = (await $.ui.panes()).find(open => open.id === PANE)
     if (pane === undefined || !pane.isPlaced) {
       return
     }
     if (pane.isFocused) {
-      await $.ui.focus({ requestId: PANE, key: 'add' })
+      await $.ui.focus({ requestId: PANE, key: 'notes' })
       return
     }
     if (wait === undefined) {
@@ -151,6 +134,16 @@ async function focusAdd($: EngineInterface): Promise<void> {
     }
     await $.clock.sleep(wait)
     await $.ui.open({ id: PANE, title: TITLE, focus: true })
+  }
+}
+
+// Swaps the notes for the note about the notepad, or back, and on the way
+// back puts the cursor in the notes again.
+async function showInfo($: EngineInterface, isShown: boolean): Promise<void> {
+  isInfoShown = isShown
+  await $.ui.invalidate('ui.render')
+  if (!isShown) {
+    await $.ui.focus({ requestId: PANE, key: 'notes' })
   }
 }
 
@@ -175,19 +168,24 @@ export const register: Register = on => {
     if (isOpen && isWidget) {
       await $.ui.close({ id: PANE })
     }
+    // /notes always shows the notes, even if the note about them was up.
+    if (isInfoShown) {
+      isInfoShown = false
+      void $.ui.invalidate('ui.render')
+    }
     const opened = await $.ui.open({ id: PANE, title: TITLE, focus: true })
     if (!opened.isPlaced) {
       return { text: `The notepad can't be shown here: ${opened.reason}` }
     }
     // Not awaited: the prompt box lets go of the keyboard only once this
     // command has finished.
-    void focusAdd($).catch(() => undefined)
+    void focusNotes($).catch(() => undefined)
 
     return {}
   })
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
-    const { Box, Input, Text } = $.ui.resolve(e)
+    const { Box, Button, Input, Link, Text } = $.ui.resolve(e)
     isWidget = e.props.placement === 'widget'
 
     // Only the app, a terminal or VS Code on this computer get the text. A
@@ -221,33 +219,89 @@ export const register: Register = on => {
     // The terminal draws a key hint instead, "⏎ submit" unless told
     // otherwise, which would read as if the notes were sent somewhere.
     const isTerminal = e.surface === 'terminal'
+    const isDesktop = e.surface === 'desktop'
     const bodyRows = e.props.scroll.bodyRows
 
-    // The boxes fill the pane, so that only the notes scroll, never the pane.
-    // The terminal lays them out in whole rows: the notes, a row between, and
-    // the add box. In the app the Box around them is the pane's rows tall,
-    // its padding inside that, and the add box sits at its bottom. The notes
-    // take the rows left less five: their padding, the add box's two lines
-    // and padding, and some space between. The padding is the same on every
-    // side and gives the focus outline room, a ring and a glow about 8px
-    // wide drawn outside a field, which the app cuts off at the pane's edges.
-    const rows = Math.min(200, Math.max(3, bodyRows - (isTerminal ? 2 : 5)))
-    const layout = isTerminal
-      ? ({ gap: 1 } as const)
-      : ({
-          height: Math.max(bodyRows, rows + 5),
-          padding: 'sm',
-          justifyContent: 'space-between',
-        } as const)
+    // In the app a row along the bottom holds the Shift+Enter hint, a link to
+    // the repository and an ⓘ that swaps the notes for a note about them.
+    const footer = isDesktop && (
+      <Box flexDirection="row" justifyContent="space-between" alignItems="center" gap="sm">
+        <Text dimColor wrap="truncate-end">
+          Shift+Enter to create a new line
+        </Text>
+        <Box flexDirection="row" alignItems="center" gap="sm">
+          <Link href={REPO} label="GitHub" />
+          <Button
+            key="info"
+            plain
+            dimColor
+            onPress={() => void showInfo($, !isInfoShown).catch(() => undefined)}
+          >
+            ⓘ
+          </Button>
+        </Box>
+      </Box>
+    )
+
+    // The terminal gives the notes every row. The app takes three rows for the
+    // row along the bottom and the padding (two left the box running past the
+    // pane's bottom on 2.1.330); VS Code, which draws no such row, two.
+    const rows = Math.min(200, Math.max(3, bodyRows - (isTerminal ? 0 : isDesktop ? 3 : 2)))
+
+    // The Box is the pane's rows tall (a percentage height isn't honoured
+    // there), and the box and the row under it sit at its top and bottom,
+    // inside a padding that is even on every side and gives the focus outline
+    // room (a ring and a glow drawn outside a field, which the app cuts off at
+    // the pane's edges). What the box's lines leave over goes between the two:
+    // the apps measure a pane in rows of their code font, which don't match
+    // the box's lines, so the box can't fill the pane to the pixel.
+    const layout = {
+      height: Math.max(bodyRows, rows + 3),
+      padding: 'xs',
+      justifyContent: 'space-between',
+    } as const
+
+    if (isDesktop && isInfoShown) {
+      return (
+        <Box flexDirection="column" {...layout}>
+          <Box flexDirection="column" gap="sm">
+            <Text bold>Session Notes</Text>
+            <Text>
+              A private notepad for this session. Each session has its own, and
+              its notes come back when the session opens again.
+            </Text>
+            <Text>
+              Shift+Enter creates a new line. Enter on its own only saves: the
+              app sends a text box's contents when you press Enter, and a plugin
+              can't change that.
+            </Text>
+            <Text>
+              Your notes stay on this computer. They're saved as you type to the
+              file below and never sent to Claude or anywhere online, so Claude
+              only sees them if you ask it to open the file. On a phone, through
+              Remote Control, the notepad shows a note in their place.
+            </Text>
+            <Text dimColor>{path}</Text>
+            <Text dimColor>Made by Afraaz LLC · MIT license</Text>
+            <Box alignSelf="flex-start">
+              <Button key="back" onPress={() => void showInfo($, false).catch(() => undefined)}>
+                Back to notes
+              </Button>
+            </Box>
+          </Box>
+          {footer}
+        </Box>
+      )
+    }
 
     return (
-      <Box flexDirection="column" {...layout}>
+      <Box flexDirection="column" {...(isTerminal ? {} : layout)}>
         <Input
           key="notes"
           rows={rows}
           value={text}
-          placeholder={PLACEHOLDER}
           submitLabel={isTerminal ? 'save' : undefined}
+          autoFocus
           onInput={value => void save($, path, value)}
           onSubmit={value => {
             // Enter saves too. Drawing again keeps the text in the box on a
@@ -255,25 +309,7 @@ export const register: Register = on => {
             void save($, path, value).then(() => $.ui.invalidate('ui.render'))
           }}
         />
-        <Input
-          key="add"
-          // The app draws a one-line field only as wide as its own few
-          // words, and a field of two lines or more as wide as the pane.
-          rows={isTerminal ? 1 : 2}
-          value={addValue}
-          placeholder={ADD_PLACEHOLDER}
-          submitLabel={isTerminal ? 'add' : undefined}
-          autoFocus
-          onInput={() => {
-            // Typing after a line was added: the box is drawn as the person's
-            // own again, so that drawing it empty next time clears it.
-            if (addValue !== undefined) {
-              addValue = undefined
-              void $.ui.invalidate('ui.render')
-            }
-          }}
-          onSubmit={value => void add($, path, value)}
-        />
+        {footer}
       </Box>
     )
   })

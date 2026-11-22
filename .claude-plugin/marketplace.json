@@ -1,6 +1,6 @@
 {
   "name": "claude-app-code-session-notes",
-  "owner": { "name": "Afraaz Ali", "url": "https://github.com/afraaz-llc" },
+  "owner": { "name": "Afraaz LLC", "url": "https://afraazali.com" },
   "description": "session-notes: a private notepad for each Claude Code session",
   "plugins": [
     {

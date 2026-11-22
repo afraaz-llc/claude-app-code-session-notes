@@ -1,9 +1,9 @@
 {
   "name": "session-notes",
   "displayName": "Session Notes",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "A private notepad for each Claude Code session (/notes), saved as a plain file on your computer and never sent to Claude",
-  "author": { "name": "Afraaz Ali", "url": "https://github.com/afraaz-llc" },
+  "author": { "name": "Afraaz LLC", "url": "https://afraazali.com" },
   "homepage": "https://github.com/afraaz-llc/claude-app-code-session-notes",
   "repository": "https://github.com/afraaz-llc/claude-app-code-session-notes",
   "supportUrl": "https://github.com/afraaz-llc/claude-app-code-session-notes/issues",
